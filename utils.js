@@ -10,7 +10,7 @@ function generateRandomID(length = 20) {
 
 function isRawObject(item) {
   if (item === null || typeof item !== "object") return false;
-  return item instanceof Object && item.constructor == Object().constructor;
+  return item.constructor?.name === "Object";
 }
 
 function promiseToSync(promise) {

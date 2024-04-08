@@ -8,6 +8,7 @@ const {
 } = require("./utils.js");
 
 const getClass = Symbol("getClass");
+const AsyncFunction = (async function(){}).constructor;
 
 class BaseConnection {
   #config;
@@ -25,6 +26,9 @@ class BaseConnection {
 
     return new Proxy(() => {}, this.proxyHandlers);
   }
+
+  get encoder() { return this.#encoder.bind(this) }
+  get decoder() { return this.#decoder.bind(this) }
 
   #storeAsProxy(item) {
     for (let [value, key] of this.#proxies.entries()) {
@@ -91,29 +95,37 @@ class BaseConnection {
     // For everything else
     let location = this.#storeAsProxy(value);
 
-    // if (util.isFunction(value)) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "function",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (value instanceof Promise || value instanceof AsyncFunction) {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "awaitable",
+        $$__location__$$: location
+      };
+    }
 
-    // if (Array.isArray(value)) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "array",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (typeof value === "function") {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "function",
+        $$__location__$$: location
+      };
+    }
 
-    // if (util.isSymbol(value)) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "symbol",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (Array.isArray(value)) {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "array",
+        $$__location__$$: location
+      };
+    }
+
+    if (typeof value === "symbol") {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "symbol",
+        $$__location__$$: location
+      };
+    }
 
     // if (util.isBuffer(value)) {
     //   return {
@@ -123,29 +135,29 @@ class BaseConnection {
     //   };
     // }
 
-    // if (util.types.isSet(value)) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "set",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (value instanceof Set) {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "set",
+        $$__location__$$: location
+      };
+    }
 
-    // if (value instanceof Event) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "event",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (value instanceof Event) {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "event",
+        $$__location__$$: location
+      };
+    }
 
-    // if (util.types.isDate(value)) {
-    //   return {
-    //     $$__type__$$: "bridge_proxy",
-    //     $$__obj_type__$$: "date",
-    //     $$__location__$$: location
-    //   };
-    // }
+    if (value instanceof Date) {
+      return {
+        $$__type__$$: "bridge_proxy",
+        $$__obj_type__$$: "date",
+        $$__location__$$: location
+      };
+    }
 
     return {
       $$__type__$$: "bridge_proxy",
