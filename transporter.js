@@ -231,7 +231,7 @@ class BridgeClient extends BaseTransporterClient {
   }
 
   send(message) {
-    console.log("Sending:", message);
+    // console.log("Sending:", message);
     this.#channel.post("bridge:message", message);
   }
 }
@@ -251,7 +251,7 @@ class BridgeTransporter extends BaseTransporter {
     this.#channel.on("bridge:close", () => client.emit("close"));
     this.#channel.on("bridge:error", () => client.emit("error"));
     this.#channel.on("bridge:message", data => {
-      console.log("Recieved:", data)
+      // console.log("Recieved:", data)
       client.emit("message", data)
     });
 

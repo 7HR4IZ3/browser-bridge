@@ -8,7 +8,6 @@ const {
 } = require("./utils.js");
 
 const getClass = Symbol("getClass");
-const AsyncFunction = (async function(){}).constructor;
 
 class BaseConnection {
   #config;
@@ -95,7 +94,7 @@ class BaseConnection {
     // For everything else
     let location = this.#storeAsProxy(value);
 
-    if (value instanceof Promise || value instanceof AsyncFunction) {
+    if (value instanceof Promise) {
       return {
         $$__type__$$: "bridge_proxy",
         $$__obj_type__$$: "awaitable",

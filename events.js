@@ -8,14 +8,15 @@ class BaseEventHandler {
   }
 
   async processAction(action, data, respond) {
-    const callback = this["action:" + action];
-    if (!callback) return false;
+    let callback = this["action:" + action];
+    if (!callback) return respond(null, "Invalid action.");
 
     try {
-      if (action === "action:await_proxy") {
-        respond(await callback.call(this, data));
+      callback = callback.bind(this);
+      if (action === "await_proxy") {
+        respond(await callback(data));
       } else {
-        respond(callback.call(this, data));
+        respond(callback(data));
       }
     } catch (error) {
       respond(null, error);
@@ -85,8 +86,7 @@ class BaseEventHandler {
     let response,
       target = this.#getProxy(request.location);
     if (target) {
-      if (request.string) response = String(target);
-      else response = require("util").inspect(target);
+      response = String(target);
     }
     return response;
   }

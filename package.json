@@ -15,6 +15,7 @@
   "author": "Thraize",
   "license": "MIT",
   "dependencies": {
+    "events": "^3.3.0",
     "lossless-json": "^4.0.1"
   }
 }

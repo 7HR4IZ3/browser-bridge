@@ -1,5 +1,3 @@
-const { evaluatePromiseSync } = require("./utils.js");
-
 const isProxy = Symbol("isProxy");
 const getTarget = Symbol("getTarget");
 const getCallstack = Symbol("getCallstack");
@@ -21,17 +19,16 @@ class BaseProxy {
         if (property === getTarget) return self.#target;
 
         if (property === "then") {
-          if (self.#target.$$__obj_type__$$ !== "awaitable") {
-            return evaluatePromiseSync(
+          if (self.#target.$$__obj_type__$$ === "awaitable") {
+            return (resolve, reject) => {
               self.#target.client.recieve({
-                target: property,
-                action: "await_proxy",
+                target: property, action: "await_proxy",
                 location: self.#target.$$__location__$$
-              })
-            );
+              }).then(resolve).catch(reject);
+            };
           }
+          return undefined;
         }
-
         if (property == "toJSON") {
           return () => ({
             $$__reverse__$$: true,
@@ -50,106 +47,69 @@ class BaseProxy {
           }
         }
 
-        return evaluatePromiseSync(
-          new Promise((resolve, reject) => {
-            let useKwargs, isolate;
-            let hasExtra = property.includes("$");
-            if (property.includes("$")) {
-              if (property === "$") {
-              } else {
-                if (property.startsWith("$")) {
-                  isolate = true;
-                  property = property.slice(1);
-                }
-                if (property.endsWith("$")) {
-                  useKwargs = true;
-                  property = property.slice(0, -1);
-                }
-              }
+        let useKwargs, isolate;
+        let hasExtra = property.includes("$");
+        if (property.includes("$")) {
+          if (property === "$") {
+          } else {
+            if (property.startsWith("$")) {
+              isolate = true;
+              property = property.slice(1);
             }
+            if (property.endsWith("$")) {
+              useKwargs = true;
+              property = property.slice(0, -1);
+            }
+          }
+        }
 
-            self.#target.client
-              .recieve({
-                target: property,
-                action: "get_proxy_attribute",
-                location: self.#target.$$__location__$$
-              })
-              .then(result => {
-                try {
-                  // if (hasExtra && result instanceof BaseProxy) {
-                  //   result.$$__bridge_data__$$.config.isolate == isolate;
-                  //   result.$$__bridge_data__$$.config.useKwargs = useKwargs;
-                  // }
-                  resolve(result);
-                } catch (error) {
-                  reject(error);
-                }
-              })
-              .catch(reject);
-          })
-        );
+        return self.#target.client.recieveSync({
+          target: property, action: "get_proxy_attribute",
+          location: self.#target.$$__location__$$
+        });
       },
       set: function (target, property, value) {
-        return evaluatePromiseSync(
-          new Promise((resolve, reject) => {
-            self.#target.client
-              .recieve({
-                value: value,
-                target: property,
-                action: "set_proxy_attribute",
-                location: self.#target.$$__location__$$
-              })
-              .then(result => resolve(result))
-              .catch(reject);
-          })
-        );
+        return self.#target.client.recieveSync({
+          value: value,
+          target: property,
+          action: "set_proxy_attribute",
+          location: self.#target.$$__location__$$
+        });
       },
       ownKeys: function (target) {
         return Object.keys(
-          evaluatePromiseSync(
-            self.#target.client.recieve({
-              action: "get_proxy_attributes",
-              location: self.#target.$$__location__$$
-            })
-          )
+          self.#target.client.recieveSync({
+            action: "get_proxy_attributes",
+            location: self.#target.$$__location__$$
+          })
         );
       },
       deleteProperty: function (target, prop) {
         // to intercept property deletion
-        return evaluatePromiseSync(
-          self.#target.client.recieve({
-            target: prop,
-            action: "delete_proxy_attribute",
-            location: self.#target.$$__location__$$
-          })
-        );
+        return self.#target.client.recieveSync({
+          target: prop,
+          action: "delete_proxy_attribute",
+          location: self.#target.$$__location__$$
+        });
       },
       has: function (target, prop) {
-        return evaluatePromiseSync(
-          self.#target.client.recieve({
-            target: prop,
-            action: "has_proxy_attribute",
-            location: self.#target.$$__location__$$
-          })
-        );
+        return self.#target.client.recieveSync({
+          target: prop,
+          action: "has_proxy_attribute",
+          location: self.#target.$$__location__$$
+        });
       },
       apply: function (target, _thisArg, args) {
-        return evaluatePromiseSync(
-          self.#target.client.recieve({
-            args: args,
-            action: "call_proxy",
-            location: self.#target.$$__location__$$
-          })
-        );
+        return self.#target.client.recieveSync({
+          args: args, action: "call_proxy",
+          location: self.#target.$$__location__$$
+        });
       },
       construct: function (target, args) {
-        return evaluatePromiseSync(
-          self.#target.client.recieve({
-            args: args,
-            action: "call_proxy_constructor",
-            location: self.#target.$$__location__$$
-          })
-        );
+        return self.#target.client.recieveSync({
+          args: args, action: "call_proxy_constructor",
+          location: self.#target.$$__location__$$
+        });
       }
     };
   }
@@ -192,7 +152,7 @@ class ChainProxy extends Function {
         if (property === getCallstack) return self.#callstack;
 
         if (typeof property == "string" && property.endsWith("$$")) {
-          const next = new ChainProxy(target[getTarget], target[getCallstack]);
+          const next = new ChainProxy(self.#target, self.#callstack);
           if (!(property === "$$")) {
             next[getCallstack].push(property.slice(0, -2));
           }
@@ -203,31 +163,31 @@ class ChainProxy extends Function {
           return () => ({
             $$__type__$$: "bridge_proxy",
             $$__obj_type__$$: "reverse_proxy",
-            $$__location__$$: target[getTarget].$$__location__$$,
+            $$__location__$$: self.#target.$$__location__$$,
             $$__reverse__$$: true,
-            $$__proxy__$$: target[getCallstack]
+            $$__proxy__$$: self.#callstack
           });
         }
 
         if (property == "then") {
-          if (target[getCallstack].length) {
+          if (self.#callstack.length) {
             return (resolve, reject) => {
-              target[getTarget].client
+              self.#target.client
                 .recieve({
                   action: "get_proxy_attribute",
-                  stack: target[getCallstack],
-                  location: target[getTarget].$$__location__$$
+                  stack: self.#callstack,
+                  location: self.#target.$$__location__$$
                 })
                 .then(resolve)
                 .catch(reject);
             };
-          } else if (target[getTarget].$$__obj_type__$$ === "awaitable") {
+          } else if (self.#target.$$__obj_type__$$ === "awaitable") {
             return (resolve, reject) => {
-              target[getTarget].client
+              self.#target.client
                 .recieve({
                   target: property,
                   action: "await_proxy",
-                  location: target[getTarget].$$__location__$$
+                  location: self.#target.$$__location__$$
                 })
                 .then(resolve)
                 .catch(reject);
@@ -240,8 +200,8 @@ class ChainProxy extends Function {
             // This is just for destructuring arrays
             return function* iter() {
               for (let i = 0; i < 100; i++) {
-                const next = new ChainProxy(target[getTarget], [
-                  ...target[getCallstack],
+                const next = new ChainProxy(self.#target, [
+                  ...self.#callstack,
                   i
                 ]);
                 yield next;
@@ -270,19 +230,16 @@ class ChainProxy extends Function {
 
         if (Number.isInteger(parseInt(property))) property = parseInt(property);
 
-        return new ChainProxy(target[getTarget], [
-          ...target[getCallstack],
-          property
-        ]);
+        return new ChainProxy(self.#target, [...self.#callstack, property]);
       },
 
       set: function (target, property, value) {
         return new Promise((resolve, reject) => {
-          target[getTarget].client
+          self.#target.client
             .recieve({
               action: "set_proxy_attribute",
-              stack: target[getCallstack],
-              location: target[getTarget].$$__location__$$,
+              stack: self.#callstack,
+              location: self.#target.$$__location__$$,
               value: value
             })
             .then(resolve)
@@ -290,30 +247,27 @@ class ChainProxy extends Function {
         });
       },
       ownKeys: function (target) {
-        target[getTarget].client
+        self.#target.client
           .recieve({
             action: "get_proxy_attributes",
-            stack: target[getCallstack],
-            location: target[getTarget].$$__location__$$
+            stack: self.#callstack,
+            location: self.#target.$$__location__$$
           })
           .then(data => {
-            target[getTarget].keys = data;
+            self.#target.keys = data;
           });
         return [
-          ...new Set([
-            ...Reflect.ownKeys(target),
-            ...(target[getTarget].keys || [])
-          ])
+          ...new Set([...Reflect.ownKeys(target), ...(self.#target.keys || [])])
         ];
       },
       deleteProperty: function (target, prop) {
         // to intercept property deletion
         return new Promise((resolve, reject) => {
-          target[getTarget].client
+          self.#target.client
             .recieve({
               action: "delete_proxy_attribute",
               target: prop,
-              location: target[getTarget].$$__location__$$
+              location: self.#target.$$__location__$$
             })
             .then(resolve)
             .catch(reject);
@@ -321,60 +275,62 @@ class ChainProxy extends Function {
       },
       has: function (target, prop) {
         return new Promise((resolve, reject) => {
-          target[getTarget].client
+          self.#target.client
             .recieve({
               action: "has_proxy_attribute",
               target: prop,
-              location: target[getTarget].$$__location__$$
+              location: self.#target.$$__location__$$
             })
             .then(resolve)
             .catch(reject);
         });
       },
       apply: function (target, _thisArg, args) {
-        // console.log("Calling:", target[getCallstack])
+        // console.log("Calling:", self.#callstack)
         return new Promise((resolve, reject) => {
-          let final = target[getCallstack][target[getCallstack].length - 1];
+          let final = self.#callstack[self.#callstack.length - 1];
           let kwargs = {};
           let isolate = false;
 
           if (final === "apply") {
-            target[getCallstack].pop();
+            self.#callstack.pop();
             args = [args[0], ...args[1]];
           } else if (final === "call") {
-            target[getCallstack].pop();
+            self.#callstack.pop();
           } else if (final?.includes("$")) {
             kwargs = args.pop();
 
             if (final === "$") {
-              target[getCallstack].pop();
+              self.#callstack.pop();
             } else {
               if (final?.startsWith("$")) {
                 isolate = true;
                 final = final.slice(1);
-                target[getCallstack][target[getCallstack].length - 1] = final;
+                self.#callstack[self.#callstack.length - 1] = final;
               }
               if (final?.endsWith("$")) {
-                target[getCallstack][target[getCallstack].length - 1] =
-                  final.slice(0, -1);
+                self.#callstack[self.#callstack.length - 1] = final.slice(
+                  0,
+                  -1
+                );
               }
             }
           }
           // } else if (final === 'valueOf') {
-          //   target[getCallstack].pop()
-          //   const ret = this.value(ffid, [...target[getCallstack]])
+          //   self.#callstack.pop()
+          //   const ret = this.value(ffid, [...self.#callstack])
           //   return ret
           // } else if (final === 'toString') {
-          //   target[getCallstack].pop()
-          //   const ret = this.inspect(ffid, [...target[getCallstack]])
+          //   self.#callstack.pop()
+          //   const ret = this.inspect(ffid, [...self.#callstack])
           //   return ret
           // }
 
-          target[getTarget].client
-            .recieve({
+          self.#target.client
+            .recieveSync({
               action: "call_proxy",
-              stack: target[getCallstack],
-              location: target[getTarget].$$__location__$$,
+              stack: self.#callstack,
+              location: self.#target.$$__location__$$,
               args: args,
               kwargs: kwargs,
               isolate
@@ -384,40 +340,39 @@ class ChainProxy extends Function {
         });
       },
       construct: function (target, args) {
-        // console.log("Construct:", target[getCallstack])
-        let final = target[getCallstack][target[getCallstack].length - 1];
+        // console.log("Construct:", self.#callstack)
+        let final = self.#callstack[self.#callstack.length - 1];
         let kwargs = {};
         let isolate = false;
 
         if (final === "apply") {
-          target[getCallstack].pop();
+          self.#callstack.pop();
           args = [args[0], ...args[1]];
         } else if (final === "call") {
-          target[getCallstack].pop();
+          self.#callstack.pop();
         } else if (final?.includes("$")) {
           kwargs = args.pop();
 
           if (final === "$") {
-            target[getCallstack].pop();
+            self.#callstack.pop();
           } else {
             if (final?.startsWith("$")) {
               isolate = true;
               final = final.slice(1);
-              target[getCallstack][target[getCallstack].length - 1] = final;
+              self.#callstack[self.#callstack.length - 1] = final;
             }
             if (final?.endsWith("$")) {
-              target[getCallstack][target[getCallstack].length - 1] =
-                final.slice(0, -1);
+              self.#callstack[self.#callstack.length - 1] = final.slice(0, -1);
             }
           }
         }
 
         return new Promise((resolve, reject) => {
-          target[getTarget].client
+          self.#target.client
             .recieve({
               action: "call_proxy_constructor",
-              stack: target[getCallstack],
-              location: target[getTarget].$$__location__$$,
+              stack: self.#callstack,
+              location: self.#target.$$__location__$$,
               args: args,
               kwargs: kwargs,
               isolate
